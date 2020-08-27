@@ -6,10 +6,15 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.ProgressDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.view.View;
+import android.widget.Button;
 import android.widget.VideoView;
+
+import java.io.File;
 
 public class MainActivity extends AppCompatActivity {
     AlertDialog.Builder builder;
@@ -22,10 +27,18 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
-        startActivityForResult(intent, 1);
+        //버튼 클릭시 촬영
+        Button button = findViewById(R.id.captureButton);
+        button.setOnClickListener(
+                new Button.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+                        startActivityForResult(intent, 1);
+                    }
+                }
+        );
     }
-
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -55,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
         /*라즈베리파이에서 결과가 오면 dialog 를 지우고 번역결과를 출력해야 함*/
         //현재는 3초 후에 dialog 를 dismiss 한다.
         Handler mHandler = new Handler();
-        mHandler.postDelayed(new Runnable()  {
+        mHandler.postDelayed(new Runnable() {
             public void run() {
                 videoDialog.dismiss();
                 oDialog.dismiss();
