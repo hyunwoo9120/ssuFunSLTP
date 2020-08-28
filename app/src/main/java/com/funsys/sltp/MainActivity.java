@@ -119,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
 
                 while ((readBytes = dis.read(buf)) > 0) {
                     dos.write(buf, 0, readBytes);
-                    totalReadBytes += (long)readBytes;
+                    totalReadBytes += (long) readBytes;
                 }
                 dos.close();
 
