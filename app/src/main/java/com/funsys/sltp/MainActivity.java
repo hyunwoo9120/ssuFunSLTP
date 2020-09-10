@@ -5,33 +5,33 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 import android.widget.VideoView;
 
+import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Socket;
 
 public class MainActivity extends AppCompatActivity {
-    AlertDialog.Builder builder;
-    AlertDialog videoDialog;
-    VideoView videoView;
-    ProgressDialog oDialog;
-
-    Handler handler;
-
     String videoPath = "";
+    String receivedMessage = "";
+    File file;
+    long fileSize = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,24 +56,40 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (resultCode == RESULT_OK && requestCode == 1) {
-            //통신해서 라즈베리파이로 동영상 전송하기
+
+            //동영상 uri를 절대경로로 바꾸기
             Uri vid = data.getData();
             videoPath = getRealPathFromURI(vid);
+            file = new File(videoPath);
+            fileSize = file.length();
+            Client clientSocket = new Client(data, this);
+            clientSocket.execute();
+         }
+    }
 
-            ClientThread thread = new ClientThread(new File(videoPath));
-            thread.start();
+    public class Client extends AsyncTask{
+        Intent data;
+        AlertDialog.Builder builder;
+        AlertDialog videoDialog;
+        VideoView videoView;
+        ProgressDialog oDialog;
 
-            //라즈베리파이에서 결과가 전달 되기전까지 dialog 띄우기
-            builder = new AlertDialog.Builder(this);
-            videoView = new VideoView(this);
+        Client(Intent data, Context context){
+            this.data = data;
+            builder = new AlertDialog.Builder(context);
+            videoView = new VideoView(context);
+            oDialog = new ProgressDialog(context, android.R.style.Theme_DeviceDefault_Light_Dialog);
+        }
+        @Override //라즈베리파이에서 결과가 전달 되기전까지 dialog 띄우기
+        protected void onPreExecute() {
+            super.onPreExecute();
+
             videoView.setVideoURI(data.getData());
             videoView.start();
             builder.setView(videoView);
             videoDialog = builder.create();
             videoDialog.show();
 
-            oDialog = new ProgressDialog(this,
-                    android.R.style.Theme_DeviceDefault_Light_Dialog);
             oDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
             oDialog.setMessage("번역 중입니다.\n잠시만 기다려 주세요.");
             oDialog.setCancelable(false);
@@ -81,52 +97,60 @@ public class MainActivity extends AppCompatActivity {
             oDialog.show();
         }
 
-        /*라즈베리파이에서 결과가 오면 dialog 를 지우고 번역결과를 출력해야 함*/
-        //현재는 3초 후에 dialog 를 dismiss 한다.
-//        Handler mHandler = new Handler();
-//        mHandler.postDelayed(new Runnable() {
-//            public void run() {
-//                videoDialog.dismiss();
-//                oDialog.dismiss();
-//            }
-//        }, 3000);
-
-    }
-
-    class ClientThread extends Thread {
-
-        File file;
-
-        public ClientThread(File file) {
-            this.file = file;
-        }
-
-        public void run() {
+        @Override //통신해서 라즈베리파이로 동영상 전송하기
+        protected Object doInBackground(Object[] objects) {
             Log.d("TCP", "스레드 시작");
             String host = "172.30.1.31";
-            int port = 9999;
+            int port = 5172;
 
             try {
                 Log.d("TCP", "츄라이 츄라이");
                 Socket socket = new Socket(host, port);
+                if (!socket.isConnected()) {
+                    System.out.println("Socket Connect Error.");
+                    System.exit(0);
+                }
 
-                DataInputStream dis = new DataInputStream(new FileInputStream(file));
+                DataInputStream fis = new DataInputStream(new FileInputStream(file));
+                BufferedReader dis = new BufferedReader(new InputStreamReader(socket.getInputStream(), "EUC_KR"));
                 DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
 
                 byte[] buf = new byte[1024];
                 long totalReadBytes = 0;
                 int readBytes;
 
-                while ((readBytes = dis.read(buf)) > 0) {
+                dos.writeLong(fileSize);
+                dos.flush();
+
+                while ((readBytes = fis.read(buf)) > 0) {
                     dos.write(buf, 0, readBytes);
                     totalReadBytes += (long) readBytes;
+                    System.out.println("In progress: " + totalReadBytes + "/"
+                            + fileSize + " Byte(s) ("
+                            + (totalReadBytes * 100 / fileSize) + " %)");
                 }
+                System.out.println("File transfer completed.");
+                fis.close();
+
+                receivedMessage = dis.readLine();
+                Log.d("TCP", "receive a message: " + receivedMessage);
+                dis.close();
                 dos.close();
 
+                socket.close();
             } catch (IOException e) {
                 Log.d("TCP", "don't send a message");
                 e.printStackTrace();
             }
+            return null;
+        }
+
+        @Override //dialog 종료하기
+        protected void onPostExecute(Object o) {
+            super.onPostExecute(o);
+            ((TextView)findViewById(R.id.text)).setText(receivedMessage);
+            videoDialog.dismiss();
+            oDialog.dismiss();
         }
     }
 
